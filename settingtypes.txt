@@ -2,3 +2,7 @@
 # have a small chance to start a fire.
 # Value 'false' will disable fire caused by lightnings.
 lightning_random_fire (Enable random fire) bool true
+
+lightning_ymin (Lowest y for lighting) int -20
+
+lightning_ymax (Highest y for lighting) int 999

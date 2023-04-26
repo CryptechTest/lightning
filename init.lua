@@ -1,4 +1,3 @@
-
 --[[
 
 Copyright (C) 2016 - Auke Kok <sofar@foo-projects.org>
@@ -9,18 +8,20 @@ published by the Free Software Foundation; either version 2.1
 of the license, or (at your option) any later version.
 
 --]]
-
 lightning = {}
 
-lightning.interval_low = 17
-lightning.interval_high = 503
-lightning.range_h = 100
+lightning.interval_low = 1
+lightning.interval_high = 10
+lightning.range_h = 150
 lightning.range_v = 50
 lightning.size = 100
 -- disable this to stop lightning mod from striking
 lightning.auto = true
 -- range of the skybox highlight and sound effect
 lightning.effect_range = 500
+lightning.ymin = tonumber(minetest.settings:get("lightning_ymin")) or -20
+lightning.ymax = tonumber(minetest.settings:get("lightning_ymax")) or 999
+lightning.players = {}
 
 local random_fire = minetest.settings:get_bool("lightning_random_fire") ~= false
 
@@ -68,28 +69,36 @@ local function choose_pos(pos)
 		pos = randomplayer:get_pos()
 
 		-- avoid striking underground
-		if pos.y < -20 then
+		if pos.y < lightning.ymin or pos.y > lightning.ymax then
 			return nil, nil
 		end
-
+		if not lightning.players[randomplayer:get_player_name()] or lightning.players[randomplayer:get_player_name()] ~= true then
+			return nil, nil
+		end
 		pos.x = math.floor(pos.x - (lightning.range_h / 2) + rng:next(1, lightning.range_h))
 		pos.y = pos.y + (lightning.range_v / 2)
 		pos.z = math.floor(pos.z - (lightning.range_h / 2) + rng:next(1, lightning.range_h))
 	end
 
-	local b, pos2 = minetest.line_of_sight(pos, {x = pos.x, y = pos.y - lightning.range_v, z = pos.z}, 1)
+	local b, pos2 = minetest.line_of_sight(pos, { x = pos.x, y = pos.y - lightning.range_v, z = pos.z }, 1)
 
 	-- nothing but air found
 	if b then
 		return nil, nil
 	end
 
-	local n = minetest.get_node({x = pos2.x, y = pos2.y - 1/2, z = pos2.z})
+	local n = minetest.get_node({ x = pos2.x, y = pos2.y - 1 / 2, z = pos2.z })
 	if n.name == "air" or n.name == "ignore" then
 		return nil, nil
 	end
 
 	return pos, pos2
+end
+
+lightning.storm = function(player, is_storming)
+	minetest.after(0.5, function()
+		lightning.players[player:get_player_name()] = is_storming
+	end)
 end
 
 -- lightning strike API
@@ -111,12 +120,12 @@ lightning.strike = function(pos)
 		amount = 1,
 		time = 0.2,
 		-- make it hit the top of a block exactly with the bottom
-		minpos = {x = pos2.x, y = pos2.y + (lightning.size / 2) + 1/2, z = pos2.z },
-		maxpos = {x = pos2.x, y = pos2.y + (lightning.size / 2) + 1/2, z = pos2.z },
-		minvel = {x = 0, y = 0, z = 0},
-		maxvel = {x = 0, y = 0, z = 0},
-		minacc = {x = 0, y = 0, z = 0},
-		maxacc = {x = 0, y = 0, z = 0},
+		minpos = { x = pos2.x, y = pos2.y + (lightning.size / 2) + 1 / 2, z = pos2.z },
+		maxpos = { x = pos2.x, y = pos2.y + (lightning.size / 2) + 1 / 2, z = pos2.z },
+		minvel = { x = 0, y = 0, z = 0 },
+		maxvel = { x = 0, y = 0, z = 0 },
+		minacc = { x = 0, y = 0, z = 0 },
+		maxacc = { x = 0, y = 0, z = 0 },
 		minexptime = 0.2,
 		maxexptime = 0.2,
 		minsize = lightning.size * 10,
@@ -126,22 +135,32 @@ lightning.strike = function(pos)
 		-- to make it appear hitting the node that will get set on fire, make sure
 		-- to make the texture lightning bolt hit exactly in the middle of the
 		-- texture (e.g. 127/128 on a 256x wide texture)
-		texture = "lightning_lightning_" .. rng:next(1,3) .. ".png",
+		texture = "lightning_lightning_" .. rng:next(1, 3) .. ".png",
 		-- 0.4.15+
 		glow = 14,
 	})
-
-	minetest.sound_play({ pos = pos, name = "lightning_thunder", gain = 10, max_hear_distance = lightning.effect_range })
+	local pitch = 1.0
+	if rng:next(1, 2) == 1 then
+		pitch = 0.8
+	end
+	minetest.sound_play({
+		pos = pos,
+		name = "lightning_thunder",
+		gain = 10,
+		pitch = pitch,
+		max_hear_distance = lightning.effect_range
+	})
 
 	-- damage nearby objects, player or not
 	for _, obj in ipairs(minetest.get_objects_inside_radius(pos, 5)) do
 		-- nil as param#1 is supposed to work, but core can't handle it.
-		obj:punch(obj, 1.0, {full_punch_interval = 1.0, damage_groups = {fleshy=8}}, nil)
+		obj:punch(obj, 1.0, { full_punch_interval = 1.0, damage_groups = { fleshy = 8 } }, nil)
 	end
 
 	local playerlist = minetest.get_connected_players()
 	for i = 1, #playerlist do
 		local player = playerlist[i]
+
 		local distance = vector.distance(player:get_pos(), pos)
 
 		-- only affect players inside effect_range
@@ -161,34 +180,34 @@ lightning.strike = function(pos)
 	ttl = 5
 
 	-- set the air node above it on fire
-	pos2.y = pos2.y + 1/2
-	if minetest.get_item_group(minetest.get_node({x = pos2.x, y = pos2.y - 1, z = pos2.z}).name, "liquid") < 1 then
+	pos2.y = pos2.y + 1 / 2
+	if minetest.get_item_group(minetest.get_node({ x = pos2.x, y = pos2.y - 1, z = pos2.z }).name, "liquid") < 1 then
 		if minetest.get_node(pos2).name == "air" then
 			-- only 1/4 of the time, something is changed
-			if rng:next(1,4) > 1 then
+			if rng:next(1, 4) > 1 then
 				return
 			end
 			-- very rarely, potentially cause a fire
-			if fire and random_fire and rng:next(1,1000) == 1 then
-				minetest.set_node(pos2, {name = "fire:basic_flame"})
+			if fire and random_fire and rng:next(1, 1000) == 1 then
+				minetest.set_node(pos2, { name = "fire:basic_flame" })
 			else
-				minetest.set_node(pos2, {name = "lightning:dying_flame"})
+				minetest.set_node(pos2, { name = "lightning:dying_flame" })
 			end
 		end
 	end
 
 	-- perform block modifications
-	if not default or rng:next(1,10) > 1 then
+	if not default or rng:next(1, 10) > 1 then
 		return
 	end
 	pos2.y = pos2.y - 1
 	local n = minetest.get_node(pos2)
 	if minetest.get_item_group(n.name, "tree") > 0 then
-		minetest.set_node(pos2, { name = "default:coalblock"})
+		minetest.set_node(pos2, { name = "default:coalblock" })
 	elseif minetest.get_item_group(n.name, "sand") > 0 then
-		minetest.set_node(pos2, { name = "default:glass"})
+		minetest.set_node(pos2, { name = "default:glass" })
 	elseif minetest.get_item_group(n.name, "soil") > 0 then
-		minetest.set_node(pos2, { name = "default:gravel"})
+		minetest.set_node(pos2, { name = "default:gravel" })
 	end
 end
 
@@ -214,12 +233,11 @@ minetest.register_node("lightning:dying_flame", {
 	buildable_to = true,
 	sunlight_propagates = true,
 	damage_per_second = 4,
-	groups = {dig_immediate = 3, not_in_creative_inventory=1},
+	groups = { dig_immediate = 3, not_in_creative_inventory = 1 },
 	on_timer = function(pos)
 		minetest.remove_node(pos)
 	end,
 	drop = "",
-
 	on_construct = function(pos)
 		minetest.get_node_timer(pos):start(rng:next(20, 40))
 		if fire and fire.on_flame_add_at then
