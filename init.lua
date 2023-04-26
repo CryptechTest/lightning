@@ -57,7 +57,7 @@ minetest.register_globalstep(revertsky)
 local function choose_pos(pos)
 	if not pos then
 		local playerlist = minetest.get_connected_players()
-		local playercount = table.getn(playerlist)
+		local playercount = #playerlist
 
 		-- nobody on
 		if playercount == 0 then
