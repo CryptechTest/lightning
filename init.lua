@@ -43,7 +43,7 @@ local revertsky = function()
 	for playername, sky in pairs(ps) do
 		local player = minetest.get_player_by_name(playername)
 		-- check if the player is still online
-		if player then
+		if player and sky then
 			player:set_sky(sky)
 		end
 	end
@@ -165,7 +165,7 @@ lightning.strike = function(pos)
 
 		-- only affect players inside effect_range
 		if distance < lightning.effect_range then
-			local sky = player:get_sky()
+			local sky = player:get_sky(true)
 
 			local name = player:get_player_name()
 			if ps[name] == nil then
