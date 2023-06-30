@@ -18,7 +18,7 @@ lightning.size = 100
 -- disable this to stop lightning mod from striking
 lightning.auto = true
 -- range of the skybox highlight and sound effect
-lightning.effect_range = 500
+lightning.effect_range = 260
 lightning.ymin = tonumber(minetest.settings:get("lightning_ymin")) or -20
 lightning.ymax = tonumber(minetest.settings:get("lightning_ymax")) or 999
 lightning.players = {}
@@ -96,7 +96,7 @@ local function choose_pos(pos)
 end
 
 lightning.storm = function(player, is_storming)
-	minetest.after(0.5, function()
+	minetest.after(0, function()
 		lightning.players[player:get_player_name()] = is_storming
 	end)
 end
